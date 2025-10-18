@@ -1,0 +1,148 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Keypad.h>
+#include <Servo.h>
+
+// === OLED Setup ===
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// === Keypad Setup ===
+const byte ROWS = 4;
+const byte COLS = 4;
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {9, 8, 7, 6}; // Connect to R1-R4 of keypad
+byte colPins[COLS] = {5, 4, 3, 2}; // Connect to C1-C4 of keypad
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+// === Servo Setup ===
+Servo lockServo;
+const int servoPin = 11;
+
+// === LEDs ===
+const int ledRed = 10;    // Red LED for wrong code
+const int ledGreen = 12;  // Green LED for correct code
+
+// === Lock Password ===
+const String correctCode = "1234";  // Change this to your desired password
+String inputCode = "";
+
+void setup() {
+  Serial.begin(9600);
+
+  // === Initialize OLED ===
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("OLED failed"));
+    while (true); // Stop if OLED not found
+  }
+
+  // === Set up pins ===
+  pinMode(ledRed, OUTPUT);
+  pinMode(ledGreen, OUTPUT);
+  digitalWrite(ledRed, LOW);
+  digitalWrite(ledGreen, LOW);
+
+  lockServo.attach(servoPin);
+  lockServo.write(0); // Locked position
+
+  // === Show initial screen ===
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("LOCKED");
+  display.display();
+}
+
+void loop() {
+  char key = keypad.getKey();
+
+  if (key) {
+    Serial.print("Key: ");
+    Serial.println(key);
+
+    if (key == '*') {
+      inputCode = "";  // Clear input
+    } else if (key == '#') {
+      // Submit code
+      if (inputCode == correctCode) {
+        accessGranted();
+      } else {
+        accessDenied();
+      }
+      inputCode = "";
+    } else {
+      if (inputCode.length() < correctCode.length()) {
+        inputCode += key;
+      }
+    }
+
+    updateDisplay();
+  }
+}
+
+void updateDisplay() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("Enter Code:");
+
+  display.setTextSize(2);
+  display.setCursor(0, 20);
+
+  for (int i = 0; i < inputCode.length(); i++) {
+    display.print("*");
+  }
+
+  display.display();
+}
+
+void accessGranted() {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setCursor(0, 0);
+  display.println("ACCESS");
+  display.setCursor(0, 30);
+  display.println("GRANTED");
+  display.display();
+
+  digitalWrite(ledGreen, HIGH);
+  lockServo.write(90);  // Unlock
+  delay(3000);          // Stay unlocked for 3 seconds
+  lockServo.write(0);   // Lock again
+  digitalWrite(ledGreen, LOW);
+
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setCursor(0, 0);
+  display.println("LOCKED");
+  display.display();
+}
+
+void accessDenied() {
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setCursor(0, 0);
+  display.println("ACCESS");
+  display.setCursor(0, 30);
+  display.println("DENIED");
+  display.display();
+
+  digitalWrite(ledRed, HIGH);
+  delay(1000);
+  digitalWrite(ledRed, LOW);
+
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setCursor(0, 0);
+  display.println("LOCKED");
+  display.display();
+}
